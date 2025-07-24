@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الحضور والغياب</title>
+    <link rel="shortcut icon" href="./hand-sign.png" type="image/x-icon">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Tahoma', sans-serif;
+            background-color: #f0f0f0;
+            padding: 1rem;
+            margin: 0;
+            text-align: center;
+        }
+        
+        h1,
+        h2,
+        h3 {
+            margin-bottom: 1rem;
+        }
+        
+        input,
+        select,
+        button {
+            margin: 0.5rem 0.25rem;
+            padding: 0.6rem;
+            font-size: 1rem;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+        
+        button {
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        #reader {
+            width: 100%;
+            max-width: 350px;
+            margin: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2rem;
+        }
+        
+        th,
+        td {
+            padding: 0.75rem;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+        
+        th {
+            background-color: #ddd;
+        }
+        
+        #stats {
+            margin-top: 2rem;
+            background-color: #fff;
+            padding: 1rem;
+            border-radius: 10px;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        footer {
+            margin-top: 3rem;
+            padding: 1rem;
+            background-color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 600px) {
+            input,
+            button {
+                width: 100%;
+                margin: 0.25rem 0;
+            }
+            table,
+            thead,
+            tbody,
+            th,
+            td,
+            tr {
+                display: block;
+                width: 100%;
+            }
+            tr {
+                margin-bottom: 1rem;
+                border-bottom: 1px solid #ccc;
+            }
+            td,
+            th {
+                text-align: right;
+                padding: 0.5rem;
+            }
+            #stats {
+                padding: 0.5rem;
+            }
+        }
+    @media (max-width: 400px) {
+    body {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    h1, h2, h3 {
+        font-size: 1rem;
+    }
+
+    input, button {
+        font-size: 0.85rem;
+        padding: 0.45rem;
+        width: 100%;
+        margin: 0.25rem 0;
+    }
+
+    #reader {
+        width: 100% !important;
+        margin: 0 auto 1rem auto;
+    }
+
+    table, thead, tbody, th, td, tr {
+        display: block;
+        width: 100%;
+    }
+
+    tr {
+        margin-bottom: 1rem;
+        border-bottom: 1px solid #ccc;
+    }
+
+    th, td {
+        text-align: right;
+        padding: 0.5rem;
+    }
+
+    #stats {
+        padding: 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+</style>
+</head>
+
+<body>
+    <h1>كشف غياب وحضور الكشافة البحرية (جوالة)</h1>
+
+    <div id="reader"></div>
+
+    <div style="margin-top: 1rem;">
+        <label>
+            <input type="checkbox" id="uniformCheck" />
+            هل يرتدي الزي؟
+        </label>
+    </div>
+
+    <h2>تسجيل غياب يدوي</h2>
+    <input type="text" id="absentName" placeholder="اسم الطالب">
+    <button onclick="manualAbsent()">تسجيل غياب</button>
+
+    <h2>البيانات المسجلة</h2>
+    <button onclick="exportToExcel()">تصدير إلى Excel</button>
+    <button onclick="clearRecords()" style="background-color:#d9534f;">مسح السجل</button>
+
+    <table id="recordsTable">
+        <thead>
+            <tr>
+                <th>الاسم</th>
+                <th>الحالة</th>
+                <th>الزي</th>
+                <th>التاريخ</th>
+                <th>الوقت</th>
+            </tr>
+        </thead>
+        <tbody id="recordsBody"></tbody>
+    </table>
+
+    <div id="stats">
+        <h2>إحصائيات عامة</h2>
+        <p id="summaryStats"></p>
+        <h3>بحث عن إحصائيات اسم معين</h3>
+        <input type="text" id="searchName" placeholder="ادخل الاسم">
+        <button onclick="showUserStats()">عرض</button>
+        <p id="userStats"></p>
+    </div>
+
+    <footer>
+        <p>جميع الحقوق محفوظة @Fady Melad ✝️ 2025</p>
+    </footer>
+
+    <script>
+        let scanned = false;
+
+        function saveRecord(name, status, uniform = '') {
+            const now = new Date();
+            const date = now.toLocaleDateString('ar-EG');
+            const time = now.toLocaleTimeString('ar-EG');
+
+            const record = {
+                name,
+                status,
+                uniform,
+                date,
+                time
+            };
+            let records = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+            const alreadyExists = records.some(r => r.name === name && r.date === date);
+            if (alreadyExists) {
+                alert(`تم تسجيل ${name} بالفعل اليوم.`);
+                return;
+            }
+
+            records.push(record);
+            localStorage.setItem('attendanceRecords', JSON.stringify(records));
+            loadRecords();
+        }
+
+        function loadRecords() {
+            const records = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+            const tbody = document.getElementById('recordsBody');
+            tbody.innerHTML = '';
+            records.forEach(record => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${record.name}</td>
+                    <td>${record.status}</td>
+                    <td>${record.uniform || '-'}</td>
+                    <td>${record.date}</td>
+                    <td>${record.time}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            showSummaryStats(records);
+        }
+
+        function showSummaryStats(records) {
+            const total = records.length;
+            const present = records.filter(r => r.status === "حضور").length;
+            const absent = records.filter(r => r.status === "غياب").length;
+            document.getElementById('summaryStats').innerText = `الإجمالي: ${total} | حضور: ${present} | غياب: ${absent}`;
+        }
+
+        function showUserStats() {
+            const name = document.getElementById('searchName').value.trim();
+            if (!name) return alert("ادخل اسم الطالب");
+            const records = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+            const userRecords = records.filter(r => r.name === name);
+            const userPresent = userRecords.filter(r => r.status === "حضور").length;
+            const userAbsent = userRecords.filter(r => r.status === "غياب").length;
+            document.getElementById('userStats').innerText = `${name} حضر ${userPresent} مرة وغاب ${userAbsent} مرة.`;
+        }
+
+        function manualAbsent() {
+            const name = document.getElementById('absentName').value.trim();
+            if (!name) return alert("يرجى إدخال اسم الطالب");
+            saveRecord(name, "غياب");
+            document.getElementById('absentName').value = '';
+        }
+
+        function exportToExcel() {
+            const records = JSON.parse(localStorage.getItem('attendanceRecords') || '[]');
+            let csvContent = "data:text/csv;charset=utf-8,﻿الاسم,الحالة,الزي,التاريخ,الوقت\n";
+            records.forEach(record => {
+                csvContent += `${record.name},${record.status},${record.uniform || '-'},${record.date},${record.time}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "سجل_الحضور.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function clearRecords() {
+            if (confirm("هل أنت متأكد من مسح كل السجل؟")) {
+                localStorage.removeItem("attendanceRecords");
+                loadRecords();
+                document.getElementById('userStats').innerText = '';
+            }
+        }
+
+        const html5QrCode = new Html5Qrcode("reader");
+        Html5Qrcode.getCameras().then(devices => {
+            if (devices && devices.length) {
+                html5QrCode.start({
+                        facingMode: "environment"
+                    }, {
+                        fps: 10,
+                        qrbox: 250
+                    },
+                    qrCodeMessage => {
+                        if (!scanned) {
+                            scanned = true;
+                            const uniform = document.getElementById('uniformCheck').checked ? 'بالزي' : 'بدون زي';
+                            saveRecord(qrCodeMessage, "حضور", uniform);
+                            setTimeout(() => scanned = false, 3000);
+                        }
+                    },
+                    errorMessage => {
+                        // تجاهل الأخطاء
+                    }
+                ).catch(err => console.error(err));
+            }
+        });
+
+        loadRecords();
+    </script>
+</body>
+
+</html>
